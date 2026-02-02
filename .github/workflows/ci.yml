@@ -1,0 +1,17 @@
+name: S3 Sync Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  test-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Verify Secret Access
+        run: |
+          echo "Checking if we can see our secret..."
+          echo "The secret is: ${{ secrets.MY_AWS_TEST_SECRET }}"
