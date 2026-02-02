@@ -4,14 +4,24 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  id-token: write   # This is required for requesting the OIDC JWT Token
+  contents: read    # This is required for actions/checkout
+
 jobs:
-  test-job:
+  s3-sync-job:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Verify Secret Access
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: eu-north-1
+
+      - name: Sync to S3 Bucket
         run: |
-          echo "Checking if we can see our secret..."
-          echo "The secret is: ${{ secrets.MY_AWS_TEST_SECRET }}"
+          # Syncs current folder (.) to your bucket, excluding hidden git files
+          aws s3 sync . s3://aws-s3-project-bojan-2026 --exclude ".git/*" --exclude ".github/*"
