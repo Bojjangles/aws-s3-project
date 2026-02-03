@@ -1,19 +1,29 @@
-name: S3 Sync Pipeline
+name: NextJS S3 & CloudFront Pipeline
 
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'src/**'   # TASK: Only runs when the "real software" changes
 
 permissions:
-  id-token: write   # This is required for requesting the OIDC JWT Token
-  contents: read    # This is required for actions/checkout
+  id-token: write
+  contents: read
 
 jobs:
-  s3-sync-job:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      # TASK: Build the "Real" Software (Next.js)
+      - name: Install and Build Next.js
+        working-directory: ./src
+        run: |
+          npm ci
+          npm run build
+          # This command creates the 'out' folder (standalone HTML/CSS/JS)
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -21,30 +31,14 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: eu-north-1
 
-      - name: Sync to S3 Bucket
+      # TASK: Deploy to S3
+      - name: Deploy to S3
         run: |
-          # Syncs current folder (.) to your bucket, excluding hidden git files
-          aws s3 sync . s3://aws-s3-project-bojan-2026 --exclude ".git/*" --exclude ".github/*"
+          # Sync the build folder ('out') to the bucket root
+          aws s3 sync ./src/out s3://aws-s3-project-bojan-2026 --delete
 
-          # Job Summaries mit $GITHUB_STEP_SUMMARY
-  monitoring-example:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # Job Summary erstellen
-      - name: Create Job Summary
+      # TASK: Invalidate CloudFront (Clear Cache)
+      - name: Invalidate CloudFront
         run: |
-          echo "## 🚀 Build Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Actor | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Status | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Unit Tests: 42 passed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Integration Tests: 12 passed" >> $GITHUB_STEP_SUMMARY
+          # Tells CloudFront: "My files changed, please delete the old copies"
+          aws cloudfront create-invalidation --distribution-id E3SVPDDLTNQN6M --paths "/*"
